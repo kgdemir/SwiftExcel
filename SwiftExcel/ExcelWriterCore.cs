@@ -2,6 +2,7 @@
 using SharpCompress.Writers;
 using SharpCompress.Writers.Zip;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -14,13 +15,12 @@ namespace SwiftExcel
         protected internal bool Finalized;
         protected internal string FilePath;
         protected internal Sheet Sheet;
-
         protected internal string OutputPath;
 
         protected internal Stream Stream;
         protected internal ZipWriter ZipWriter;
 
-        protected ExcelWriterCore(string filePath, Sheet sheet)
+        protected ExcelWriterCore(string filePath, Sheet sheet, List<int> ColumnWidths)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
@@ -29,8 +29,22 @@ namespace SwiftExcel
 
             FilePath = filePath;
             Sheet = sheet ?? new Sheet();
-
+            SetColumnWidths(ColumnWidths);
             Init();
+
+        }
+
+        private void SetColumnWidths(List<int> ColumnWidths)
+        {
+            if (ColumnWidths != null)
+            {
+                if (Sheet.ColumnsWidth == null)
+                    Sheet.ColumnsWidth = new List<double>();
+                foreach (var d in ColumnWidths)
+                {
+                    Sheet.ColumnsWidth.Add(d);
+                }
+            }
         }
 
         protected internal void Init()
@@ -42,6 +56,7 @@ namespace SwiftExcel
             Stream = new FileStream(FilePath, FileMode.Create, FileAccess.Write);
             ZipWriter = (ZipWriter)WriterFactory.Open(Stream, ArchiveType.Zip, new ZipWriterOptions(CompressionType.Deflate) { DeflateCompressionLevel = SharpCompress.Compressors.Deflate.CompressionLevel.BestSpeed, UseZip64 = true });
 
+
             CreateRels();
             CreateDocProps();
             CreateContentTypes();
@@ -50,6 +65,7 @@ namespace SwiftExcel
             CreateWorkbook();
 
             StartSheets();
+
         }
 
         public void Save()
@@ -277,7 +293,13 @@ namespace SwiftExcel
                          "</workbook>");
             }
         }
-
+        public enum ExcelStyles
+        {
+            DEFAULT = 0,
+            INT = 1,
+            SHORTDATE = 2,
+            FINANCIAL_DECIMAL_2 = 3
+        }
         protected internal void CreateExcelStyles()
         {
             using (var subStream = ZipWriter.WriteToStream("xl/styles.xml", new ZipWriterEntryOptions()))
@@ -303,8 +325,11 @@ namespace SwiftExcel
                          "<cellStyleXfs count=\"1\">" +
                          "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/>" +
                          "</cellStyleXfs>" +
-                         "<cellXfs count=\"1\">" +
+                         "<cellXfs count=\"4\">" +
                          $"<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\">{(Sheet.WrapText ? "<alignment wrapText=\"1\"/>" : "")}</xf>" +
+                         "<xf numFmtId=\"1\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\" />" +
+                         "<xf numFmtId=\"14\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\" />" +
+                         "<xf numFmtId=\"43\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"1\" applyFont=\"1\" />" +
                          "</cellXfs>" +
                          "<cellStyles count=\"1\">" +
                          "<cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/>" +
@@ -335,6 +360,10 @@ namespace SwiftExcel
                 }
                 Sheet.Write("</cols>");
             }
+            else
+            {
+                Sheet.Write($"<cols><col min=\"1\" max=\"255\" width=\"15\" style=\"1\" bestFit=\"1\"></col></cols>");
+            }
 
             Sheet.Write("<sheetData>");
         }
@@ -351,6 +380,7 @@ namespace SwiftExcel
                 Sheet.Write("</row>");
             }
             Sheet.Write("</sheetData><pageMargins left=\"0.7\" right=\"0.7\" top=\"0.75\" bottom=\"0.75\" header=\"0.3\" footer=\"0.3\"/></worksheet>");
+            Sheet.Flush();
             Sheet.StreamWriter.Dispose();
             Sheet.Stream.Dispose();
         }
