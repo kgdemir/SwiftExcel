@@ -2,13 +2,14 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Security;
+using System.Text;
 
 namespace SwiftExcel
 {
     public class Sheet
     {
         public const string DefaultName = "Sheet1";
-
+        private const int FLUSH_CACHE_AT=10000;
         public string Name { get; set; } = DefaultName;
         public bool RightToLeft { get; set; }
         public bool WrapText { get; set; }
@@ -18,12 +19,23 @@ namespace SwiftExcel
         internal StreamWriter StreamWriter { get; set; }
         internal int CurrentCol { get; set; }
         internal int CurrentRow { get; set; }
-
+        StringBuilder sbCache = new StringBuilder();
         internal void Write(string value)
         {
-            StreamWriter.Write(value);
+            sbCache.Append(value);
+            if (sbCache.Length >= FLUSH_CACHE_AT)
+            {
+                StreamWriter.Write(sbCache.ToString());
+                sbCache = new StringBuilder();
+            }
         }
-
+        internal void Flush()
+        {
+            if (sbCache.Length > 0)
+            {
+                StreamWriter.Write(sbCache.ToString());
+            }
+        }
         internal void PrepareRow(int col, int row)
         {
             if (col <= 0)
